@@ -1,0 +1,15 @@
+---
+- hosts: tstecsb2
+  tasks:
+    - name: check installed packages
+      yum:
+        list={{ item.package }}
+      register: listpackages
+      with_items:
+      - { package: 'tree' }
+      - { package: 'sed' }
+      - { package: 'nano' }
+
+    - name: Display
+      debug:
+        var=listpackages

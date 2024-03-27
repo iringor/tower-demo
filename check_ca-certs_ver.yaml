@@ -1,0 +1,11 @@
+---
+- hosts: all
+  gather_facts: no
+  tasks:
+    - name: check ca-certs version
+      shell: "rpm -qa | grep ca-certificates"
+      register: result
+
+    - name: display result
+      debug:
+        msg: "{{ result.stdout_lines }}"

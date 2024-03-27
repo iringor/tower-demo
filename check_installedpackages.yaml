@@ -1,0 +1,11 @@
+---
+- hosts: all
+  tasks:
+    - name: check installed
+      yum:
+        list: installed
+      register: installedpackages
+
+    - name: Display
+      debug:
+        var: installedpackages
