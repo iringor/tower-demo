@@ -13,7 +13,7 @@
 # Decreased security when Avahi is externally accessible
 # Identifier: (advisor:hardening_unencrypted_avahi|HARDENING_UNENC_AVAHI,stop)
 # Version: f2dd2877861a4186e4f39460cde9cb3cd4cafef6
-- hosts: "tstecsb2.ymus.yamaha-motor.com"
+- hosts: tstecsb2
   become: true
   tasks:
     - name: Stop the avahi service
@@ -25,7 +25,7 @@
 
 
 - name: run insights
-  hosts: "tstecsb2.ymus.yamaha-motor.com"
+  hosts: tstecsb2
   become: true
   gather_facts: false
   vars:
