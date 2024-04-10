@@ -1,1 +1,0 @@
-/scratch        -soft,timeo=10,suid,rsize=32768,wsize=32768,nolock ddcyp:/data/col1/backup/scratch

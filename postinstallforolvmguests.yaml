@@ -56,7 +56,6 @@
     ansible.builtin.copy:
       src: ymus-NTCAR2-SHA256.cer
       dest: /etc/pki/ca-trust/source/anchors/ymus-NTCAR2-SHA256.cer
-      checksum: yes
       owner: root
       group: root
       mode: 0644
@@ -65,7 +64,6 @@
     ansible.builtin.copy:
       src: ymus.conf
       dest: /etc/sssd/conf.d/ymus.conf
-      checksum: yes
       owner: root
       group: root
       mode: 0600
