@@ -1,6 +1,6 @@
 ---
 - name: Post Installation Steps for New Oracle 8.5
-  hosts: tsansed1
+  hosts: all
   gather_facts: no
   vars_files:
     - vars.yml
