@@ -1,0 +1,18 @@
+---
+- name: YUM update and optional reboot playbook
+  hosts: all
+  become: yes
+  vars:
+    survey_reboot_option: "{{ survey_reboot_option }}"
+  tasks:
+    - name: Ensure all packages are up to date
+      yum:
+        name: "*"
+        state: latest
+      register: yum_update_result
+
+    - name: Reboot the system if there were package updates and if requested
+      reboot:
+      when: 
+        - yum_update_result.changed
+        - survey_reboot_option == 'Yes'
