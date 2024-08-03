@@ -1,0 +1,14 @@
+---
+- name: Get Red Hat Version
+  hosts: all
+  gather_facts: no
+  serial: 1
+  tasks:
+    - name: Check Red Hat version
+      shell: cat /etc/redhat-release
+      register: redhat_version
+
+    - name: Print Red Hat version with hostname
+      debug:
+        msg: " {{ inventory_hostname }} : {{ redhat_version.stdout }}"
+
