@@ -1,0 +1,104 @@
+- name: Update sssd configuration with a single backup
+  hosts: all
+  become: yes
+  tasks:
+
+    - name: Check if the backup file /etc/sssd/conf.d/ymus.conf.20241014 already exists
+      stat:
+        path: /etc/sssd/conf.d/ymus.conf.20241014
+      register: backup_exists
+
+    - name: Display message and stop playbook if the backup file already exists
+      debug:
+        msg: "The backup file /etc/sssd/conf.d/ymus.conf.20241014 already exists. This playbook was previously run."
+      when: backup_exists.stat.exists
+      # Stop play if backup already exists
+    - meta: end_play
+      when: backup_exists.stat.exists
+
+    - name: Check if sssd is active
+      shell: systemctl is-active sssd
+      register: sssd_status
+      changed_when: false
+
+    - name: Check if sssd is running
+      shell: systemctl status sssd
+      register: sssd_running
+      changed_when: false
+
+    - name: Check if /etc/sssd/conf.d/ymus.conf exists
+      stat:
+        path: /etc/sssd/conf.d/ymus.conf
+      register: sssd_conf_exists
+
+    - name: Copy ymus-ca-bundle.cer to /etc/openldap/ymus-ca-bundle.cer
+      copy:
+        src: ymus-ca-bundle.cer
+        dest: /etc/openldap/ymus-ca-bundle.cer
+        owner: root
+        group: root
+        mode: '0644'
+      when: 
+        - sssd_status.stdout == "active"
+        - sssd_running.rc == 0
+        - sssd_conf_exists.stat.exists
+      register: copy_cacert
+
+    - name: Create a backup of /etc/sssd/conf.d/ymus.conf before making any changes
+      copy:
+        src: /etc/sssd/conf.d/ymus.conf
+        dest: /etc/sssd/conf.d/ymus.conf.20241014
+        remote_src: yes
+      when: 
+        - sssd_status.stdout == "active"
+        - sssd_running.rc == 0
+        - sssd_conf_exists.stat.exists
+
+    - name: Change ^ldap_uri to FQDN in /etc/sssd/conf.d/ymus.conf
+      lineinfile:
+        path: /etc/sssd/conf.d/ymus.conf
+        regexp: '^ldap_uri'
+        line: 'ldap_uri = ldaps://ntdccyp1.ymus.yamaha-motor.com, ldaps://ntdccyp2.ymus.yamaha-motor.com'
+        state: present
+        backup: no
+      when: 
+        - sssd_status.stdout == "active"
+        - sssd_running.rc == 0
+        - sssd_conf_exists.stat.exists
+      register: update_uri
+
+    - name: Add or update ldap_tls_cacert in /etc/sssd/conf.d/ymus.conf
+      lineinfile:
+        path: /etc/sssd/conf.d/ymus.conf
+        regexp: '^ldap_tls_cacert'
+        line: 'ldap_tls_cacert = /etc/openldap/ymus-ca-bundle.cer'
+        state: present
+        backup: no
+      when: 
+        - sssd_status.stdout == "active"
+        - sssd_running.rc == 0
+        - sssd_conf_exists.stat.exists
+      register: update_cacertfile
+
+    - name: Update tls_reqcert in /etc/sssd/conf.d/ymus.conf
+      lineinfile:
+        path: /etc/sssd/conf.d/ymus.conf
+        regexp: 'tls_reqcert'
+        line: 'ldap_tls_reqcert = demand'
+        state: present
+        backup: no
+      when: 
+        - sssd_status.stdout == "active"
+        - sssd_running.rc == 0
+        - sssd_conf_exists.stat.exists
+      register: update_reqcert
+
+    - name: Restart sssd service if changes are made
+      systemd:
+        name: sssd
+        state: restarted
+      when: 
+        - sssd_status.stdout == "active"
+        - sssd_running.rc == 0
+        - sssd_conf_exists.stat.exists
+        - copy_cacert.changed or update_uri.changed or update_cacertfile.changed or update_reqcert.changed

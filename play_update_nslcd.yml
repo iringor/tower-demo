@@ -1,0 +1,114 @@
+---
+- name: Update nslcd configuration with a single backup
+  hosts: all
+  become: yes
+  tasks:
+
+    - name: Check if the backup file /etc/nslcd.conf.20241014 already exists
+      stat:
+        path: /etc/nslcd.conf.20241014
+      register: backup_exists
+
+    - name: Stop playbook if the backup file already exists
+      meta: end_play
+      when: backup_exists.stat.exists
+      # Optionally add a message to the output
+      vars:
+        msg: "The backup file /etc/nslcd.conf.20241014 already exists. This playbook was previously run."
+
+    - name: Check if nslcd is active
+      shell: systemctl is-active nslcd
+      register: nslcd_status
+      changed_when: false
+
+    - name: Check if nslcd is running
+      shell: systemctl status nslcd
+      register: nslcd_running
+      changed_when: false
+
+    - name: Check if /etc/nslcd.conf exists
+      stat:
+        path: /etc/nslcd.conf
+      register: nslcd_conf_exists
+
+    - name: Copy ymus-ca-bundle.cer to /etc/openldap/ymus-ca-bundle.cer
+      copy:
+        src: ymus-ca-bundle.cer
+        dest: /etc/openldap/ymus-ca-bundle.cer
+        owner: root
+        group: root
+        mode: '0644'
+      when: 
+        - nslcd_status.stdout == "active"
+        - nslcd_running.rc == 0
+        - nslcd_conf_exists.stat.exists
+      register: copy_cacert
+
+    - name: Create a backup of /etc/nslcd.conf before making any changes
+      copy:
+        src: /etc/nslcd.conf
+        dest: /etc/nslcd.conf.20241014
+        remote_src: yes
+      when: 
+        - nslcd_status.stdout == "active"
+        - nslcd_running.rc == 0
+        - nslcd_conf_exists.stat.exists
+
+    - name: Change uri ldaps to FQDN in /etc/nslcd.conf
+      lineinfile:
+        path: /etc/nslcd.conf
+        regexp: '^uri ldaps:'
+        line: 'uri ldaps://ntdccyp1.ymus.yamaha-motor.com/ ldaps://ntdccyp2.ymus.yamaha-motor.com/ ldaps://ntdcksw1.ymus.yamaha-motor.com/ ldaps://ntdcksw2.ymus.yamaha-motor.com/'
+        state: present
+        backup: no
+      when: 
+        - nslcd_status.stdout == "active"
+        - nslcd_running.rc == 0
+        - nslcd_conf_exists.stat.exists
+      register: update_uri
+
+    - name: Comment out tls_cacertdir in /etc/nslcd.conf without replacing the whole line
+      replace:
+        path: /etc/nslcd.conf
+        regexp: '^tls_cacertdir'
+        replace: '#tls_cacertdir'
+      when: 
+        - nslcd_status.stdout == "active"
+        - nslcd_running.rc == 0
+        - nslcd_conf_exists.stat.exists
+
+    - name: Add or update tls_cacertfile in /etc/nslcd.conf
+      lineinfile:
+        path: /etc/nslcd.conf
+        regexp: '^tls_cacertfile'
+        line: 'tls_cacertfile /etc/openldap/ymus-ca-bundle.cer'
+        state: present
+        backup: no
+      when: 
+        - nslcd_status.stdout == "active"
+        - nslcd_running.rc == 0
+        - nslcd_conf_exists.stat.exists
+      register: update_cacertfile
+
+    - name: Update tls_reqcert in /etc/nslcd.conf
+      lineinfile:
+        path: /etc/nslcd.conf
+        regexp: '^tls_reqcert'
+        line: 'tls_reqcert try'
+        state: present
+        backup: no
+      when: 
+        - nslcd_status.stdout == "active"
+        - nslcd_running.rc == 0
+        - nslcd_conf_exists.stat.exists
+      register: update_reqcert
+
+    - name: Restart nslcd service if changes are made
+      systemd:
+        name: nslcd
+        state: restarted
+      when: 
+        - nslcd_status.stdout == "active"
+        - nslcd_running.rc == 0
+        - nslcd_conf_exists.stat.exists
+        - copy_cacert.changed or update_uri.changed or comment_cacertdir.changed or update_cacertfile.changed or update_reqcert.changed

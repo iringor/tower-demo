@@ -1,0 +1,41 @@
+---
+- name: Update CA Trust
+  hosts: all
+  become: yes
+  tasks:
+    - name: Slurp the CA trust bundle
+      slurp:
+        src: /etc/pki/ca-trust/extracted/openssl/ca-bundle.trust.crt
+      register: ca_bundle
+
+    - name: Decode and check if the certificate is already added
+      set_fact:
+        cert_check: "{{ ca_bundle['content'] | b64decode }}"
+      changed_when: false
+
+    - name: Exit play if the certificate is already added
+      meta: end_play
+      when: "'HamiGDMgPvtvNsL5ItXh0qg3G7a' in cert_check"
+
+    - name: Copy the certificate if not already added
+      copy:
+        src: ymusroot2024.cer
+        dest: /etc/pki/ca-trust/source/anchors/ymusroot2024.cer
+
+    - name: Update CA trust
+      command: update-ca-trust
+
+    - name: Verify the certificate is now present
+      slurp:
+        src: /etc/pki/ca-trust/extracted/openssl/ca-bundle.trust.crt
+      register: verify_bundle
+
+    - name: Decode and check the certificate is added
+      set_fact:
+        verify_cert: "{{ verify_bundle['content'] | b64decode }}"
+      changed_when: false
+
+    - name: Fail if the certificate was not properly added
+      fail:
+        msg: "The certificate was not added successfully"
+      when: "'HamiGDMgPvtvNsL5ItXh0qg3G7a' not in verify_cert"
