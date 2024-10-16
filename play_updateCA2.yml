@@ -7,35 +7,41 @@
       slurp:
         src: /etc/pki/ca-trust/extracted/openssl/ca-bundle.trust.crt
       register: ca_bundle
+      ignore_errors: yes
 
-    - name: Decode and check if the certificate is already added
+    - name: Decode the CA trust bundle content
       set_fact:
         cert_check: "{{ ca_bundle['content'] | b64decode }}"
+      when: ca_bundle is defined and ca_bundle.content is defined
       changed_when: false
 
     - name: Exit play if the certificate is already added
       meta: end_play
-      when: "'HamiGDMgPvtvNsL5ItXh0qg3G7a' in cert_check"
+      when: ca_bundle is defined and "'HamiGDMgPvtvNsL5ItXh0qg3G7a' in cert_check"
 
     - name: Copy the certificate if not already added
       copy:
         src: ymusroot2024.cer
         dest: /etc/pki/ca-trust/source/anchors/ymusroot2024.cer
+      when: ca_bundle is not defined or "'HamiGDMgPvtvNsL5ItXh0qg3G7a' not in cert_check"
 
     - name: Update CA trust
       command: update-ca-trust
+      when: ca_bundle is not defined or "'HamiGDMgPvtvNsL5ItXh0qg3G7a' not in cert_check"
 
     - name: Verify the certificate is now present
       slurp:
         src: /etc/pki/ca-trust/extracted/openssl/ca-bundle.trust.crt
       register: verify_bundle
+      ignore_errors: yes
 
     - name: Decode and check the certificate is added
       set_fact:
         verify_cert: "{{ verify_bundle['content'] | b64decode }}"
+      when: verify_bundle is defined and verify_bundle.content is defined
       changed_when: false
 
     - name: Fail if the certificate was not properly added
       fail:
         msg: "The certificate was not added successfully"
-      when: "'HamiGDMgPvtvNsL5ItXh0qg3G7a' not in verify_cert"
+      when: verify_bundle is defined and "'HamiGDMgPvtvNsL5ItXh0qg3G7a' not in verify_cert"
