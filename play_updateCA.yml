@@ -1,0 +1,33 @@
+---
+- name: Update CA Trust
+  hosts: all
+  become: yes
+  tasks:
+    - name: Check if the certificate is already added
+      command: grep HamiGDMgPvtvNsL5ItXh0qg3G7a /etc/pki/ca-trust/extracted/openssl/ca-bundle.trust.crt
+      register: cert_check
+      ignore_errors: yes
+
+    - name: Exit play if the certificate is already added
+      meta: end_play
+      when: cert_check.rc == 0
+
+    - name: Copy the certificate if not already added
+      copy:
+        src: ymusroot2024.cer
+        dest: /etc/pki/ca-trust/source/anchors/ymusroot2024.cer
+      when: cert_check.rc != 0
+
+    - name: Update CA trust
+      command: update-ca-trust
+      when: cert_check.rc != 0
+
+    - name: Verify the certificate is now present
+      command: grep HamiGDMgPvtvNsL5ItXh0qg3G7a /etc/pki/ca-trust/extracted/openssl/ca-bundle.trust.crt
+      register: verify_cert
+      ignore_errors: yes
+
+    - name: Fail if the certificate was not properly added
+      fail:
+        msg: "The certificate was not added successfully"
+      when: verify_cert.rc != 0
