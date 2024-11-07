@@ -26,12 +26,7 @@
     - name: Create report file if directory is accessible
       copy:
         content: |
-          hostname: {{ ansible_hostname }}
-          date: {{ ansible_date_time.date }}
-          time: {{ ansible_date_time.time }}
-          distribution: {{ ansible_distribution_file_variety }}
-          version: {{ ansible_distribution_version }}
-          wget_version: {{ wget_version.stdout if wget_version is defined else 'N/A' }}
+          {{ ansible_hostname }},{{ ansible_date_time.date }} {{ ansible_date_time.time }},{{ ansible_distribution_file_variety }},{{ ansible_distribution_version }},{{ wget_version.stdout if wget_version is defined else 'N/A' }}
         dest: "{{ report_dir }}/{{ ansible_hostname }}"
         owner: tssilr1
         group: techsupp
