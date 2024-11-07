@@ -1,0 +1,39 @@
+- name: Update wget package using yum
+  hosts: all
+  become: yes
+  vars:
+    report_dir: /scratch/don/wget
+  tasks:
+    - name: Ensure wget is updated
+      yum:
+        name: wget
+        state: latest
+
+    - name: Gather system facts
+      setup:
+        filter: ansible_date_time, ansible_distribution*, ansible_hostname
+
+    - name: Get wget version
+      command: rpm -q wget
+      register: wget_version
+      ignore_errors: yes
+
+    - name: Check if report directory is accessible
+      stat:
+        path: "{{ report_dir }}"
+      register: report_dir_check
+
+    - name: Create report file if directory is accessible
+      copy:
+        content: |
+          hostname: {{ ansible_hostname }}
+          date: {{ ansible_date_time.date }}
+          time: {{ ansible_date_time.time }}
+          distribution: {{ ansible_distribution_file_variety }}
+          version: {{ ansible_distribution_version }}
+          wget_version: {{ wget_version.stdout if wget_version is defined else 'N/A' }}
+        dest: "{{ report_dir }}/{{ ansible_hostname }}"
+        owner: tssilr1
+        group: techsupp
+        mode: '0644'
+      when: report_dir_check.stat.exists
