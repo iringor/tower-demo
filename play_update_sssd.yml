@@ -1,104 +1,68 @@
-- name: Update sssd configuration with a single backup
+---
+- name: Check and update sssd configuration
   hosts: all
-  become: yes
+  become: true
   tasks:
 
-    - name: Check if the backup file /etc/sssd/conf.d/ymus.conf.20241014 already exists
-      stat:
-        path: /etc/sssd/conf.d/ymus.conf.20241014
-      register: backup_exists
+    - name: Check if ymus.conf exists and service is running
+      block:
+        - name: Check if ymus.conf exists
+          stat:
+            path: /etc/sssd/conf.d/ymus.conf
+          register: sssd_conf_file
 
-    - name: Display message and stop playbook if the backup file already exists
-      debug:
-        msg: "The backup file /etc/sssd/conf.d/ymus.conf.20241014 already exists. This playbook was previously run."
-      when: backup_exists.stat.exists
-      # Stop play if backup already exists
-    - meta: end_play
-      when: backup_exists.stat.exists
+        - name: Check if sssd service is running
+          service:
+            name: sssd
+            state: started
+          register: sssd_service_status
 
-    - name: Check if sssd is active
-      shell: systemctl is-active sssd
-      register: sssd_status
-      changed_when: false
+      rescue:
+        - name: Report error if ymus.conf does not exist or service is not running
+          fail:
+            msg: "Not using sssd or the file /etc/sssd/conf.d/ymus.conf does not exist"
 
-    - name: Check if sssd is running
-      shell: systemctl status sssd
-      register: sssd_running
-      changed_when: false
+    - name: Check if ldap_referrals=false is already present
+      block:
+        - name: Search for ldap_referrals=false in ymus.conf
+          shell: grep -q '^ldap_referrals=false' /etc/sssd/conf.d/ymus.conf
+          register: ldap_referrals_check
+          failed_when: false
+          changed_when: false
 
-    - name: Check if /etc/sssd/conf.d/ymus.conf exists
-      stat:
-        path: /etc/sssd/conf.d/ymus.conf
-      register: sssd_conf_exists
+        - name: Skip subsequent tasks if ldap_referrals=false exists
+          when: ldap_referrals_check.rc == 0
+          debug:
+            msg: "ldap_referrals=false is already present in the configuration. No changes needed."
 
-    - name: Copy ymus-ca-bundle.cer to /etc/openldap/ymus-ca-bundle.cer
-      copy:
-        src: ymus-ca-bundle.cer
-        dest: /etc/openldap/ymus-ca-bundle.cer
-        owner: root
-        group: root
-        mode: '0644'
-      when: 
-        - sssd_status.stdout == "active"
-        - sssd_running.rc == 0
-        - sssd_conf_exists.stat.exists
-      register: copy_cacert
+    - name: Handle backup and file replacement
+      when: ldap_referrals_check.rc != 0
+      block:
+        - name: Check if backup file exists
+          stat:
+            path: /etc/sssd/conf.d/ymus.conf.20250122
+          register: backup_file_check
 
-    - name: Create a backup of /etc/sssd/conf.d/ymus.conf before making any changes
-      copy:
-        src: /etc/sssd/conf.d/ymus.conf
-        dest: /etc/sssd/conf.d/ymus.conf.20241014
-        remote_src: yes
-      when: 
-        - sssd_status.stdout == "active"
-        - sssd_running.rc == 0
-        - sssd_conf_exists.stat.exists
+        - name: End play if backup file exists
+          when: backup_file_check.exists
+          debug:
+            msg: "Backup file /etc/sssd/conf.d/ymus.conf.20250122 already exists. No changes made."
 
-    - name: Change ^ldap_uri to FQDN in /etc/sssd/conf.d/ymus.conf
-      lineinfile:
-        path: /etc/sssd/conf.d/ymus.conf
-        regexp: '^ldap_uri'
-        line: 'ldap_uri = ldaps://ntdccyp1.ymus.yamaha-motor.com, ldaps://ntdccyp2.ymus.yamaha-motor.com'
-        state: present
-        backup: no
-      when: 
-        - sssd_status.stdout == "active"
-        - sssd_running.rc == 0
-        - sssd_conf_exists.stat.exists
-      register: update_uri
+        - name: Create backup of ymus.conf
+          when: not backup_file_check.exists
+          copy:
+            src: /etc/sssd/conf.d/ymus.conf
+            dest: /etc/sssd/conf.d/ymus.conf.20250122
 
-    - name: Add or update ldap_tls_cacert in /etc/sssd/conf.d/ymus.conf
-      lineinfile:
-        path: /etc/sssd/conf.d/ymus.conf
-        regexp: '^ldap_tls_cacert'
-        line: 'ldap_tls_cacert = /etc/openldap/ymus-ca-bundle.cer'
-        state: present
-        backup: no
-      when: 
-        - sssd_status.stdout == "active"
-        - sssd_running.rc == 0
-        - sssd_conf_exists.stat.exists
-      register: update_cacertfile
+        - name: Replace ymus.conf with new file
+          when: not backup_file_check.exists
+          copy:
+            src: ymus.conf
+            dest: /etc/sssd/conf.d/ymus.conf
+          notify: Restart sssd
 
-    - name: Update tls_reqcert in /etc/sssd/conf.d/ymus.conf
-      lineinfile:
-        path: /etc/sssd/conf.d/ymus.conf
-        regexp: 'tls_reqcert'
-        line: 'ldap_tls_reqcert = demand'
-        state: present
-        backup: no
-      when: 
-        - sssd_status.stdout == "active"
-        - sssd_running.rc == 0
-        - sssd_conf_exists.stat.exists
-      register: update_reqcert
-
-    - name: Restart sssd service if changes are made
-      systemd:
+  handlers:
+    - name: Restart sssd
+      service:
         name: sssd
         state: restarted
-      when: 
-        - sssd_status.stdout == "active"
-        - sssd_running.rc == 0
-        - sssd_conf_exists.stat.exists
-        - copy_cacert.changed or update_uri.changed or update_cacertfile.changed or update_reqcert.changed
