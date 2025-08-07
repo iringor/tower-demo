@@ -1,0 +1,10 @@
+- name: Get Falconctl Tags
+  hosts: all
+  become: yes
+  tasks:
+    - name: Run falconctl command
+      shell: /opt/CrowdStrike/falconctl -g --tags
+      register: falconctl_output
+    - name: Print the output
+      debug:
+        msg: "{{ falconctl_output.stdout }}"
