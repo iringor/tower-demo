@@ -1,0 +1,73 @@
+---
+- name: "Update /etc/auto.direct entries from ddcyp: to ddcyp6:"
+  hosts: all
+  become: yes
+  vars:
+    auto_direct_path: "/etc/auto.direct"
+    backup_path: "/etc/auto.direct.bak"
+    old_srv: "ddcyp:"
+    new_srv: "ddcyp6:"
+
+  tasks:
+    - name: "Backup /etc/auto.direct (once)"
+      copy:
+        src: "{{ auto_direct_path }}"
+        dest: "{{ backup_path }}"
+        remote_src: true
+        force: false
+
+    - name: "Detect current source for /scratch"
+      command: findmnt -rn -o SOURCE -T /scratch
+      register: scratch_source
+      changed_when: false
+      failed_when: false
+
+    - name: "Unmount /scratch if mounted from ddcyp: (pre-change)"
+      command: umount /scratch
+      when:
+        - scratch_source.rc == 0
+        - scratch_source.stdout_lines | select('match', '^ddcyp:') | list | length > 0
+      ignore_errors: true
+
+    # --- Visibility: show what would be changed ---
+    - name: "Show lines that would be changed (non-comment with ddcyp:)"
+      shell: awk '!/^#/ && /ddcyp:/' {{ auto_direct_path }}
+      register: autodirect_hits
+      changed_when: false
+      failed_when: false
+
+    - name: "Debug: matching lines"
+      debug:
+        var: autodirect_hits.stdout_lines
+
+    # --- Replace: simpler, skips commented lines ---
+    - name: "Replace ddcyp: with ddcyp6: on non-comment lines"
+      ansible.builtin.replace:
+        path: "{{ auto_direct_path }}"
+        regexp: '^(?!#)(.*)ddcyp:'
+        replace: '\1ddcyp6:'
+        backup: true
+      notify:
+        - "Validate autofs config"
+        - "Final unmount /scratch"
+        - "Restart autofs"
+
+  handlers:
+    - name: "Validate autofs config"
+      command: automount -m
+      register: autofs_check
+      changed_when: false
+      failed_when: autofs_check.rc != 0
+      listen: "Validate autofs config"
+
+    - name: "Final unmount /scratch"
+      command: bash -lc 'findmnt -rn -o SOURCE -T /scratch | grep -q "^ddcyp:" && umount /scratch || true'
+      when: autofs_check is defined and autofs_check.rc == 0
+      listen: "Final unmount /scratch"
+
+    - name: "Restart autofs"
+      service:
+        name: autofs
+        state: restarted
+      when: autofs_check is defined and autofs_check.rc == 0
+      listen: "Restart autofs"
