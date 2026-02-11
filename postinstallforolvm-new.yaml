@@ -1,0 +1,32 @@
+---
+### On-Boarding Oracle Linux to YMUS
+
+- name: Post Installation - new Oracle Linux
+  hosts: all
+  gather_facts: yes
+  roles:
+    # - motd_banner
+    # - base_packages_OL8
+    # - chrony_config
+    # - group_techsupp
+    # - sssd_setup
+    # - sendmail
+    # - root_aliases
+    # - nfs_simple
+    # - autofs_config
+    - initial_sudoers
+    # - install_falcon_sensor
+    ## Others used for Rhel upgrade:
+    # - fix_PV_old_header
+    # - fix_grub2_boot
+    # - rhel_register
+    # - rsyslog_forward
+    
+
+
+
+
+
+
+
+
